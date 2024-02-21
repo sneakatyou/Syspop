@@ -38,12 +38,13 @@ def create_base_pop(
         use_parallel (bool): If use parallel processing
         ncpu (int): Number of CPUs
     """
-    synpop, synadd = base_pop_wrapper(
-        pop_gender, pop_ethnicity, syn_areas, use_parallel=use_parallel, n_cpu=ncpu
-    )
+    if not exists(tmp_data_path):
+        synpop, synadd = base_pop_wrapper(
+            pop_gender, pop_ethnicity, syn_areas, use_parallel=use_parallel, n_cpu=ncpu
+        )
 
-    with open(tmp_data_path, "wb") as fid:
-        pickle_dump({"synpop": synpop, "synadd": synadd}, fid)
+        with open(tmp_data_path, "wb") as fid:
+            pickle_dump({"synpop": synpop, "synadd": synadd}, fid)
 
 
 def create_household(

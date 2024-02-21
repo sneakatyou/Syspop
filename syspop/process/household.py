@@ -16,6 +16,19 @@ from process.address import add_random_address
 
 logger = getLogger()
 
+def map_age_to_range(age):
+    if age < 20:
+        return 'U19'
+    elif 20 <= age <= 29:
+        return '20t29'
+    elif 30 <= age <= 39:
+        return '30t39'
+    elif 40 <= age <= 49:
+        return '40t49'
+    elif 50 <= age <= 64:
+        return '50t64'
+    else:
+        return '65A'
 
 def add_people(
     pop_input: DataFrame,
@@ -68,8 +81,7 @@ def add_people(
             proc_household_id += "_sp"
 
             selected_single_parent = pop_input[
-                (pop_input["age"] >= 18)
-                & (pop_input["age"] <= 65)
+                (pop_input["age"] in ['20t29', '30t39', '40t49', '50t64', '65A'])
                 & isna(pop_input["household"])
             ]
 
@@ -83,8 +95,7 @@ def add_people(
         else:
             selected_parents_male = pop_input[
                 (pop_input["gender"] == "male")
-                & (pop_input["age"] >= 18)
-                & (pop_input["age"] <= 65)
+                & (pop_input["age"] in ['20t29', '30t39', '40t49', '50t64', '65A'])
                 & isna(pop_input["household"])
             ]
 
@@ -103,17 +114,17 @@ def add_people(
                 & (pop_input["ethnicity"] == selected_parents_female_ethnicity)
                 & (
                     pop_input["age"]
-                    >= max(
+                    == map_age_to_range(max(
                         0.7 * selected_parents_male["age"].values[0],
                         parents_age_limits["min"],
                     )
-                )
+                ))
                 & (
                     pop_input["age"]
-                    <= min(
+                    == map_age_to_range(min(
                         1.3 * selected_parents_male["age"].values[0],
                         parents_age_limits["max"],
-                    )
+                    ))
                 )
                 & isna(pop_input["household"])
             ]
@@ -128,8 +139,7 @@ def add_people(
             selected_children_ethnicity = selected_parents_female_ethnicity
 
         selected_children = pop_input[
-            (pop_input["age"] >= 0)
-            & (pop_input["age"] < 18)
+            (pop_input["age"] in ['U19'])
             & (pop_input["ethnicity"] == selected_children_ethnicity)
             & isna(pop_input["household"])
         ]
@@ -222,8 +232,8 @@ def randomly_assign_people_to_household_v2(
     # target_household_num = {0: 300, 1: 50, 2: 110, 3: 40, 4: 15}
     unassigned_people = proc_base_pop[proc_base_pop["household"].isna()]
 
-    unassigned_adults = len(unassigned_people[unassigned_people["age"] >= 18])
-    unassigned_children = len(unassigned_people[unassigned_people["age"] < 18])
+    unassigned_adults = len(unassigned_people[unassigned_people["age"] != "U19"])
+    unassigned_children = len(unassigned_people[unassigned_people["age"] == "U19"])
 
     target_children_num = 0
     for children_num in target_household_num:
@@ -266,11 +276,11 @@ def randomly_assign_people_to_household(
             selected_rows = unassigned_people.sample(n=len(unassigned_people))
 
         # Check if there is a row with age < 18
-        if (selected_rows["age"] < 18).any():
+        if (selected_rows["age"] == 'U19').any():
             # If there is, check if there is also a row with age > 18
-            if (selected_rows["age"] >= 18).any():
+            if (selected_rows["age"] != 'U19').any():
                 # If there is, assign the label to these rows
-                mask = selected_rows["age"] < 18
+                mask = selected_rows["age"] == 'U19'
                 children_num = len(selected_rows[mask])
                 proc_base_pop.loc[
                     selected_rows.index, "household"
@@ -378,7 +388,7 @@ def update_household_name(proc_base_pop: DataFrame) -> DataFrame:
         DataFrame: updated population
     """
     proc_base_pop["is_child"] = proc_base_pop["age"].apply(
-        lambda x: 1 if 0 <= x < 18 else 0
+        lambda x: 1 if x == 'U19' else 0
     )
     proc_base_pop["num_children"] = (
         proc_base_pop.groupby("household")["is_child"]
@@ -434,8 +444,8 @@ def create_household_composition_v2(
     # ---------------------------------
     # Step 2: extract adults and children from the population
     # ---------------------------------
-    proc_base_pop_adults = proc_base_pop[proc_base_pop["age"] >= 18]
-    proc_base_pop_children = proc_base_pop[proc_base_pop["age"] < 18]
+    proc_base_pop_adults = proc_base_pop[proc_base_pop["age"] != 'U19']
+    proc_base_pop_children = proc_base_pop[proc_base_pop["age"] == 'U19']
 
     # ---------------------------------
     # Step 3: assign households ID randomly to adults
@@ -666,7 +676,7 @@ def rename_household_id(df: DataFrame, proc_area: str) -> DataFrame:
     """
     # Compute the number of adults and children in each household
 
-    df["is_adult"] = df["age"] >= 18
+    df["is_adult"] = df["age"] != "U19"
     df["household"] = df["household"].astype(int)
 
     grouped = (
@@ -709,8 +719,8 @@ def create_household_composition_v3(
         by="household_num", ascending=False, inplace=False
     )
 
-    unassigned_adults = proc_base_pop[proc_base_pop["age"] >= 18].copy()
-    unassigned_children = proc_base_pop[proc_base_pop["age"] < 18].copy()
+    unassigned_adults = proc_base_pop[proc_base_pop["age"] != "U19"].copy()
+    unassigned_children = proc_base_pop[proc_base_pop["age"] == "U19"].copy()
 
     household_id = 0
     for _, row in sorted_proc_houshold_dataset.iterrows():

@@ -27,7 +27,7 @@ def create_base_pop(output_area, age, df_gender_melt, df_ethnicity_melt):
     ]
 
     # Determine the number of individuals for the current output_area and age
-    n_individuals = int(gender_probs["count"].sum())
+    n_individuals = int(gender_probs["count"].sum())*5
 
     if n_individuals == 0:
         return []
@@ -71,7 +71,6 @@ def base_pop_wrapper(
     Returns:
         DataFrame: Produced base population
     """
-
     if output_area_filter is not None:
         gender_data = gender_data[gender_data["area"].isin(output_area_filter)]
         ethnicity_data = ethnicity_data[ethnicity_data["area"].isin(output_area_filter)]
