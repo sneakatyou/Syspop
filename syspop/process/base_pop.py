@@ -31,9 +31,9 @@ def create_base_pop(area_data,input_mapping, output_area,age):
     # gender_prob = area_data['age_gender_prob'][age]
     # Randomly assign gender and ethnicity to each individual
     age_index = get_index(age, input_mapping['age'])
-    # male_prob = area_data['age_gender_prob'][age_index]
-    # female_prob = area_data['age_gender_prob'][age_index+1].item() #TODO: Change it to be generalised
-    # gender_prob = [male_prob,female_prob]
+    male_prob = area_data['age_gender_prob'][age_index]
+    female_prob = area_data['age_gender_prob'][age_index+1].item() #TODO: Change it to be generalised
+    gender_prob = [male_prob,female_prob]
     gender_prob = [0.5,0.5]
     genders = choice(input_mapping['gender'], size=number_of_individuals, p=gender_prob)
 
