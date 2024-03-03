@@ -5,40 +5,42 @@ from pickle import dump as pickle_dump
 import ray
 from numpy.random import choice
 from pandas import DataFrame
-
+import numpy as np
+import pandas as pd
+import random
 logger = getLogger()
 
+def get_index(value, age_ranges):
+    try:
+        return age_ranges.index(value)
+    except ValueError:
+        return "Value not found in the list"
 
 @ray.remote
-def create_base_pop_remote(output_area, age, df_gender_melt, df_ethnicity_melt):
-    return create_base_pop(output_area, age, df_gender_melt, df_ethnicity_melt)
+def create_base_pop_remote(area_data,input_mapping, output_area,age):
+    return create_base_pop(area_data,input_mapping, output_area,age)
 
 
-def create_base_pop(output_area, age, df_gender_melt, df_ethnicity_melt):
+def create_base_pop(area_data,input_mapping, output_area,age):
     population = []
-    # Get the gender and ethnicity probabilities for the current output_area and age
-    gender_probs = df_gender_melt.loc[
-        (df_gender_melt["area"] == output_area) & (df_gender_melt["age"] == age),
-        ["gender", "prob", "count"],
-    ]
-    ethnicity_probs = df_ethnicity_melt.loc[
-        (df_ethnicity_melt["area"] == output_area) & (df_ethnicity_melt["age"] == age),
-        ["ethnicity", "prob", "count"],
-    ]
-
-    # Determine the number of individuals for the current output_area and age
-    n_individuals = int(gender_probs["count"].sum())*5
-
-    if n_individuals == 0:
+    # number_of_individuals = area_data[number_of_individuals]
+    number_of_individuals = 100
+    if number_of_individuals == 0:
         return []
-
+    
+    # gender_prob = area_data['age_gender_prob'][age]
     # Randomly assign gender and ethnicity to each individual
-    genders = choice(gender_probs["gender"], size=n_individuals, p=gender_probs["prob"])
+    age_index = get_index(age, input_mapping['age'])
+    # male_prob = area_data['age_gender_prob'][age_index]
+    # female_prob = area_data['age_gender_prob'][age_index+1].item() #TODO: Change it to be generalised
+    # gender_prob = [male_prob,female_prob]
+    gender_prob = [0.5,0.5]
+    genders = choice(input_mapping['gender'], size=number_of_individuals, p=gender_prob)
 
     ethnicities = choice(
-        ethnicity_probs["ethnicity"],
-        size=n_individuals,
-        p=ethnicity_probs["prob"],
+        input_mapping['race'],
+        size=number_of_individuals,
+        p=area_data["race_prob"],
     )
 
     for gender, ethnicity in zip(genders, ethnicities):
@@ -54,9 +56,8 @@ def create_base_pop(output_area, age, df_gender_melt, df_ethnicity_melt):
 
 
 def base_pop_wrapper(
-    gender_data: DataFrame,
-    ethnicity_data: DataFrame,
-    output_area_filter: list or None,
+    input_data: dict,
+    input_mapping: dict,
     use_parallel: bool = False,
     n_cpu: int = 8,
 ) -> DataFrame:
@@ -71,26 +72,6 @@ def base_pop_wrapper(
     Returns:
         DataFrame: Produced base population
     """
-    if output_area_filter is not None:
-        gender_data = gender_data[gender_data["area"].isin(output_area_filter)]
-        ethnicity_data = ethnicity_data[ethnicity_data["area"].isin(output_area_filter)]
-
-    # Assuming df_gender and df_ethnicity are your dataframes
-    df_gender_melt = gender_data.melt(
-        id_vars=["area", "gender"], var_name="age", value_name="count"
-    )
-    df_ethnicity_melt = ethnicity_data.melt(
-        id_vars=["area", "ethnicity"], var_name="age", value_name="count"
-    )
-
-    # Normalize the data
-    df_gender_melt["prob"] = df_gender_melt.groupby(["area", "age"])["count"].transform(
-        lambda x: x / x.sum()
-    )
-    df_ethnicity_melt["prob"] = df_ethnicity_melt.groupby(["area", "age"])[
-        "count"
-    ].transform(lambda x: x / x.sum())
-
     start_time = datetime.utcnow()
 
     if use_parallel:
@@ -98,18 +79,18 @@ def base_pop_wrapper(
 
     results = []
 
-    output_areas = list(df_gender_melt["area"].unique())
+    output_areas = list(input_data.keys())
     total_output_area = len(output_areas)
     for i, output_area in enumerate(output_areas):
         logger.info(f"Processing: {i}/{total_output_area}")
-        for age in df_gender_melt["age"].unique():
+        for age in input_mapping['age']:
             if use_parallel:
                 result = create_base_pop_remote.remote(
-                    output_area, age, df_gender_melt, df_ethnicity_melt
+                    input_data[output_area], output_area,age,input_mapping
                 )
             else:
                 result = create_base_pop(
-                    output_area, age, df_gender_melt, df_ethnicity_melt
+                    area_data=input_data[output_area], output_area=output_area,age=age,input_mapping=input_mapping
                 )
             results.append(result)
 
@@ -129,3 +110,19 @@ def base_pop_wrapper(
 
     # Convert the population to a DataFrame
     return DataFrame(population), base_address
+
+if __name__ == "__main__":
+    
+    output_dir = "/tmp/syspop_test/NYC/1"
+    file = np.load("/Users/shashankkumar/Documents/AgentTorch_Official/AgentTorch/AgentTorch/helpers/census_data/nyc/generate_data/all_nta_agents.npy", allow_pickle=True)
+    file_dict = file.item()
+    
+    input_mapping = {
+    'race': ['hispanic', 'white', 'black', 'native', 'other', 'asian'],
+    'age': ['U19', '20t29', '30t39', '40t49', '50t64', '65A'],
+    'gender': ['male', 'female']
+    }
+    
+    base_population = base_pop_wrapper(input_data=file_dict,input_mapping=input_mapping)
+    
+    

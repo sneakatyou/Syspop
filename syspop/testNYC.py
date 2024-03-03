@@ -45,7 +45,8 @@ with open("/Users/shashankkumar/Documents/GitHub/Syspop/census_data/nyc/data/hou
 #     pharmacy_data = pickle_load(fid)
 
 
-output_dir = "/tmp/syspop_test/NYC"
+output_dir = "/tmp/syspop_test/NYC/1"
+geog_data = geog_data[geog_data['super_area_code'] == 1]
 syn_areas = geog_data['area'].tolist()
 # syn_areas = [135400, 111400, 110400]
 # syn_areas = [135400]
