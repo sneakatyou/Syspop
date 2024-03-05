@@ -145,12 +145,6 @@ if __name__ == "__main__":
     file = np.load("/Users/shashankkumar/Documents/GitHub/MacroEcon/all_nta_agents.npy", allow_pickle=True)
     file_dict = file.item()
     
-    input_mapping = {
-    'race': ['hispanic', 'white', 'black', 'native', 'other', 'asian'],
-    'age': ['U19', '20t29', '30t39', '40t49', '50t64', '65A'],
-    'gender': ['male', 'female']
-    }
-    
     base_population,base_address = base_pop_wrapper(input_data=file_dict['valid_ntas'],input_mapping=file_dict['mapping'],use_parallel=True,n_cpu=8)
     base_population.to_pickle(output_dir + "/base_population.pkl")
     
