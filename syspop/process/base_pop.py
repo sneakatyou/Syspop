@@ -1,5 +1,7 @@
 from datetime import datetime
+from genericpath import exists
 from logging import getLogger
+from os import makedirs
 from pickle import dump as pickle_dump
 
 import ray
@@ -9,6 +11,9 @@ import numpy as np
 import pandas as pd
 import random
 logger = getLogger()
+
+def get_probability(attribute : list):
+    return [i/sum(attribute) for i in attribute]
 
 def get_index(value, age_ranges):
     try:
@@ -21,34 +26,54 @@ def create_base_pop_remote(area_data,input_mapping, output_area,age):
     return create_base_pop(area_data,input_mapping, output_area,age)
 
 
-def create_base_pop(area_data,input_mapping, output_area,age):
+def create_base_pop(area_data,input_mapping, output_area,current_age):
     population = []
     # number_of_individuals = area_data[number_of_individuals]
-    number_of_individuals = 100
+    
+    age_index = input_mapping['age'].index(current_age)
+    number_of_individuals = area_data['age_gender'][age_index] + area_data['age_gender'][age_index+1]
     if number_of_individuals == 0:
         return []
     
     # gender_prob = area_data['age_gender_prob'][age]
     # Randomly assign gender and ethnicity to each individual
-    age_index = get_index(age, input_mapping['age'])
-    male_prob = area_data['age_gender_prob'][age_index]
-    female_prob = area_data['age_gender_prob'][age_index+1].item() #TODO: Change it to be generalised
-    gender_prob = [male_prob,female_prob]
-    gender_prob = [0.5,0.5]
+
+    male_prob = area_data['age_gender'][age_index]
+    female_prob = area_data['age_gender'][age_index+1] #TODO: Change it to be generalised
+    combined_gender_prob = [male_prob,female_prob]
+    gender_prob = get_probability(combined_gender_prob)
+    
     genders = choice(input_mapping['gender'], size=number_of_individuals, p=gender_prob)
 
+    ethnicity_prob = get_probability(area_data['race'])
     ethnicities = choice(
         input_mapping['race'],
         size=number_of_individuals,
-        p=area_data["race_prob"],
+        p=ethnicity_prob,
     )
-
-    for gender, ethnicity in zip(genders, ethnicities):
+    
+    education_prob = get_probability(area_data['education'])
+    education = choice(
+        input_mapping['education'],
+        size=number_of_individuals,
+        p=education_prob,
+    )
+    
+    employment_insurance_prob = get_probability(area_data['employment_insurance'])
+    employment_insurance = choice(
+        input_mapping['employment_insurance'],
+        size=number_of_individuals,
+        p=employment_insurance_prob,
+    )
+    attributes_list = [genders, ethnicities,education,employment_insurance]
+    for gender, ethnicity,education,employment_insurance in zip(genders, ethnicities,education,employment_insurance):
         individual = {
             "area": output_area,
-            "age": age,
+            "age": current_age,
             "gender": gender,
             "ethnicity": ethnicity,
+            "education": education,
+            "employment_insurance": employment_insurance
         }
         population.append(individual)
 
@@ -84,9 +109,10 @@ def base_pop_wrapper(
     for i, output_area in enumerate(output_areas):
         logger.info(f"Processing: {i}/{total_output_area}")
         for age in input_mapping['age']:
+            age_index = input_mapping['age'].index(age)
             if use_parallel:
                 result = create_base_pop_remote.remote(
-                    input_data[output_area], output_area,age,input_mapping
+                    area_data=input_data[output_area], output_area=output_area,age=age,input_mapping=input_mapping
                 )
             else:
                 result = create_base_pop(
@@ -114,7 +140,9 @@ def base_pop_wrapper(
 if __name__ == "__main__":
     
     output_dir = "/tmp/syspop_test/NYC/1"
-    file = np.load("/Users/shashankkumar/Documents/AgentTorch_Official/AgentTorch/AgentTorch/helpers/census_data/nyc/generate_data/all_nta_agents.npy", allow_pickle=True)
+    if not exists(output_dir):
+        makedirs(output_dir)
+    file = np.load("/Users/shashankkumar/Documents/GitHub/MacroEcon/all_nta_agents.npy", allow_pickle=True)
     file_dict = file.item()
     
     input_mapping = {
@@ -123,6 +151,7 @@ if __name__ == "__main__":
     'gender': ['male', 'female']
     }
     
-    base_population = base_pop_wrapper(input_data=file_dict,input_mapping=input_mapping)
+    base_population,base_address = base_pop_wrapper(input_data=file_dict['valid_ntas'],input_mapping=file_dict['mapping'],use_parallel=True,n_cpu=8)
+    base_population.to_pickle(output_dir + "/base_population.pkl")
     
     
